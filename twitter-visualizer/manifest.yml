@@ -6,7 +6,7 @@ services:
 applications:
 - name: dfFeeder
   host: dffeeder
-  path: ../2806-twitter-feeder/target/twitter-feeder.war
+  path: ../twitter-feeder/target/twitter-feeder.war
 - name: dfVisualizer
   host: dfvisualizer
-  path: ../2806-twitter-visualizer/target/twitter-visualizer.war
+  path: ../twitter-visualizer/target/twitter-visualizer.war
