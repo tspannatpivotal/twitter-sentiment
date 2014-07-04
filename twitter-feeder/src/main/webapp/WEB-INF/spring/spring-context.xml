@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:int="http://www.springframework.org/schema/integration"
+	xmlns:int-twitter="http://www.springframework.org/schema/integration/twitter"
+	xmlns:int-amqp="http://www.springframework.org/schema/integration/amqp"
+	xmlns:rabbit="http://www.springframework.org/schema/rabbit"
+	xmlns:int-stream="http://www.springframework.org/schema/integration/stream"
+	xmlns:mvc="http://www.springframework.org/schema/mvc" xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:cloud="http://www.springframework.org/schema/cloud"
+	xmlns:twitter="http://www.springframework.org/schema/social/twitter"
+	xsi:schemaLocation="http://www.springframework.org/schema/integration/amqp http://www.springframework.org/schema/integration/amqp/spring-integration-amqp.xsd
+		http://www.springframework.org/schema/integration http://www.springframework.org/schema/integration/spring-integration.xsd
+		http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc-3.0.xsd
+		http://www.springframework.org/schema/integration/stream http://www.springframework.org/schema/integration/stream/spring-integration-stream.xsd
+		http://www.springframework.org/schema/cloud http://www.springframework.org/schema/cloud/spring-cloud.xsd
+		http://www.springframework.org/schema/rabbit http://www.springframework.org/schema/rabbit/spring-rabbit.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/social/twitter http://www.springframework.org/schema/social/spring-social-twitter.xsd
+		http://www.springframework.org/schema/integration/twitter http://www.springframework.org/schema/integration/twitter/spring-integration-twitter.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd">
+
+
+	<context:property-placeholder location="classpath:oauth.properties" />
+	<context:component-scan base-package="com.gopivotal.dflick" />
+	<mvc:annotation-driven />
+
+	<mvc:resources mapping="/resources/**" location="/resources/" />
+
+	<!-- Spring Social - Twitter -->
+	<bean id="twitterTemplate"
+		class="org.springframework.social.twitter.api.impl.TwitterTemplate">
+		<constructor-arg value="${twitter.oauth.consumerKey}" />
+		<constructor-arg value="${twitter.oauth.consumerSecret}" />
+		<constructor-arg value="${twitter.oauth.accessToken}" />
+		<constructor-arg value="${twitter.oauth.accessTokenSecret}" />
+	</bean>
+
+	<!-- Spring Integration -->
+	<int-twitter:search-inbound-channel-adapter
+		id="searchAdapter" channel="fromTwitter" query="#WorldCup"
+		twitter-template="twitterTemplate">
+		<int:poller fixed-rate="3000" max-messages-per-poll="5" />
+	</int-twitter:search-inbound-channel-adapter>
+
+	<int:channel id="fromTwitter" />
+	<int:channel id="toTransformer" />
+	<int:channel id="toRabbit" />
+
+	<int:filter input-channel="fromTwitter" output-channel="toTransformer"
+		ref="tweetFilter">
+	</int:filter>
+
+	<int:transformer input-channel="toTransformer"
+		output-channel="toRabbit" ref="tdt" method="transform" />
+
+	<int-amqp:outbound-channel-adapter
+		channel="toRabbit" amqp-template="amqpTemplate" exchange-name="twitter.exchange" />
+
+	<!-- Beans -->
+	<bean id="msgConverter"
+		class="org.springframework.amqp.support.converter.Jackson2JsonMessageConverter" />
+	<bean id="tweetFilter" class="com.gopivotal.dflick.filter.TweetLanguageSelector" />
+	<bean id="tdt" class="com.gopivotal.dflick.transformer.TweetTransformer" />
+	<bean id="nlp" class="com.gopivotal.dflick.service.NLP"
+		init-method="init" />
+
+	<!-- Infrastructure -->
+	<rabbit:connection-factory id="connectionFactory" />
+
+	<rabbit:template id="amqpTemplate" connection-factory="connectionFactory"
+		exchange="twitter.exchange" message-converter="msgConverter" />
+
+	<rabbit:admin connection-factory="connectionFactory" />
+
+	<rabbit:fanout-exchange name="twitter.exchange">
+	</rabbit:fanout-exchange>
+</beans>

@@ -1,0 +1,12 @@
+---
+memory: 512M 
+instances: 1
+services:
+- dfrmq
+applications:
+- name: dfFeeder
+  host: dffeeder
+  path: ../2806-twitter-feeder/target/twitter-feeder.war
+- name: dfVisualizer
+  host: dfvisualizer
+  path: ../2806-twitter-visualizer/target/twitter-visualizer.war

@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:int="http://www.springframework.org/schema/integration"
+	xmlns:int-amqp="http://www.springframework.org/schema/integration/amqp"
+	xmlns:rabbit="http://www.springframework.org/schema/rabbit" xmlns:mvc="http://www.springframework.org/schema/mvc"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xsi:schemaLocation="http://www.springframework.org/schema/integration/amqp http://www.springframework.org/schema/integration/amqp/spring-integration-amqp.xsd
+		http://www.springframework.org/schema/integration http://www.springframework.org/schema/integration/spring-integration.xsd
+		http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc-3.0.xsd
+		http://www.springframework.org/schema/rabbit http://www.springframework.org/schema/rabbit/spring-rabbit.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd">
+
+	<context:component-scan base-package="com.gopivotal.dflick" />
+	<mvc:annotation-driven />
+
+	<mvc:resources mapping="/resources/**" location="/resources/" />
+	<bean
+		class="org.springframework.web.servlet.view.ContentNegotiatingViewResolver">
+		<property name="mediaTypes">
+			<map>
+				<entry key="html" value="text/html" />
+				<entry key="json" value="application/json" />
+			</map>
+		</property>
+		<property name="viewResolvers">
+			<list>
+				<bean class="org.springframework.web.servlet.view.UrlBasedViewResolver">
+					<property name="viewClass"
+						value="org.springframework.web.servlet.view.JstlView" />
+				</bean>
+			</list>
+		</property>
+		<property name="defaultViews">
+			<list>
+				<bean
+					class="org.springframework.web.servlet.view.json.MappingJackson2JsonView">
+					<property name="prefixJson" value="true" />
+				</bean>
+			</list>
+		</property>
+	</bean>
+
+	<!-- Spring Integration -->
+	<int-amqp:inbound-channel-adapter
+		channel="fromRabbit" queue-names="#{@twitterQueue.name}"
+		connection-factory="connectionFactory" message-converter="msgConverter" />
+	<int:channel id="fromRabbit"></int:channel>
+
+	<int:service-activator input-channel="fromRabbit"
+		method="onMessage" ref="til">
+	</int:service-activator>
+
+	<int:channel id="fromRabbit">
+		<int:interceptors>
+			<int:wire-tap channel="logger" />
+		</int:interceptors>
+	</int:channel>
+
+	<int:logging-channel-adapter id="logger"
+		level="DEBUG" />
+
+	<!-- Beans -->
+	<bean id="map" class="java.util.HashMap">
+		<constructor-arg>
+			<map key-type="java.lang.Integer" value-type="com.gopivotal.dflick.model.TweetData">
+			</map>
+		</constructor-arg>
+	</bean>
+	<bean id="msgConverter"
+		class="org.springframework.amqp.support.converter.Jackson2JsonMessageConverter" />
+	<bean id="til" class="com.gopivotal.dflick.service.TweetImportListener" />
+
+	<!-- Infrastructure -->
+	<rabbit:connection-factory id="connectionFactory" />
+
+	<rabbit:template id="amqpTemplate" connection-factory="connectionFactory"
+		message-converter="msgConverter" />
+
+	<rabbit:admin connection-factory="connectionFactory" />
+
+	<rabbit:queue id="twitterQueue" />
+	<rabbit:fanout-exchange name="twitter.exchange">
+		<rabbit:bindings>
+			<rabbit:binding queue="twitterQueue" />
+		</rabbit:bindings>
+	</rabbit:fanout-exchange>
+
+</beans>
